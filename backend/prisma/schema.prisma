@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  BARISTA
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  BREWING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum LoyaltyTransactionType {
+  EARNED
+  REDEEMED
+  BONUS
+  EXPIRED
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  passwordHash    String
+  name            String
+  role            Role     @default(CUSTOMER)
+  loyaltyPoints   Int      @default(0)
+  avatarUrl       String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  orders             Order[]
+  reviews            Review[]
+  loyaltyTransactions LoyaltyTransaction[]
+
+  @@index([email])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  imageUrl  String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+}
+
+model Product {
+  id                  String   @id @default(cuid())
+  name                String
+  slug                String   @unique
+  description         String
+  price               Decimal  @db.Decimal(10, 2)
+  imageUrl            String?
+  isAvailable         Boolean  @default(true)
+  preparationMinutes  Int      @default(5)
+  categoryId          String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  category    Category         @relation(fields: [categoryId], references: [id])
+  variants    ProductVariant[]
+  orderItems  OrderItem[]
+  reviews     Review[]
+  inventory   Inventory?
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([isAvailable])
+}
+
+model ProductVariant {
+  id            String   @id @default(cuid())
+  name          String
+  priceModifier Decimal  @default(0) @db.Decimal(10, 2)
+  productId     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product    Product     @relation(fields: [productId], references: [id])
+  orderItems OrderItem[]
+}
+
+model Order {
+  id                    String       @id @default(cuid())
+  userId                String
+  status                OrderStatus  @default(PENDING)
+  totalAmount           Decimal      @db.Decimal(10, 2)
+  tableNumber           Int?
+  isTableOrder          Boolean      @default(false)
+  paymentStatus         PaymentStatus @default(PENDING)
+  stripePaymentIntentId String?
+  brewStartedAt         DateTime?
+  estimatedReadyAt      DateTime?
+  specialInstructions   String?
+  loyaltyPointsEarned   Int          @default(0)
+  loyaltyPointsRedeemed Int          @default(0)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  user               User                @relation(fields: [userId], references: [id])
+  items              OrderItem[]
+  loyaltyTransactions LoyaltyTransaction[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String
+  productId       String
+  variantId       String?
+  quantity        Int
+  unitPrice       Decimal  @db.Decimal(10, 2)
+  customizations  Json?
+  createdAt       DateTime @default(now())
+
+  order   Order           @relation(fields: [orderId], references: [id])
+  product Product         @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+}
+
+model Review {
+  id                String   @id @default(cuid())
+  userId            String
+  productId         String
+  rating            Int
+  comment           String?
+  isVerifiedPurchase Boolean @default(false)
+  createdAt         DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([userId, productId])
+}
+
+model LoyaltyTransaction {
+  id          String                 @id @default(cuid())
+  userId      String
+  orderId     String?
+  points      Int
+  type        LoyaltyTransactionType
+  description String
+  createdAt   DateTime               @default(now())
+
+  user  User   @relation(fields: [userId], references: [id])
+  order Order? @relation(fields: [orderId], references: [id])
+}
+
+model Table {
+  id       String  @id @default(cuid())
+  number   Int     @unique
+  qrCode   String  @unique
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([qrCode])
+}
+
+model Inventory {
+  id                String   @id @default(cuid())
+  productId         String   @unique
+  stockLevel        Int      @default(100)
+  lowStockThreshold Int      @default(10)
+  lastRestocked     DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id])
+}

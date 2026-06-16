@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: coffee-shop-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: coffeeshop
+      POSTGRES_PASSWORD: coffeeshop
+      POSTGRES_DB: coffeeshop
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coffeeshop"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: coffee-shop-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--requirepass", "coffeeshop_redis"]
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: coffee-shop-backend
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://coffeeshop:coffeeshop@postgres:5432/coffeeshop
+      REDIS_URL: redis://:coffeeshop_redis@redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: coffee-shop-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
